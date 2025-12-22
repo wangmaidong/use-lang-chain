@@ -51,6 +51,14 @@ class ChatPromptTemplate:
         self.messages = messages
         # 提取所有输入变量并存入实际变量
         self.input_variables = self._extract_input_variables()
+
+    # 定义一个类方法，用于通过消息对象列表创建 ChatPromptTemplate 实例
+    @classmethod
+    def from_messages(cls, messages):
+        # 使用传入的 messages 参数创建并返回 ChatPromptTemplate 实例
+        return cls(messages = messages)
+    def format_messages(self, **kwargs):
+        return self._format_all_messages(kwargs)
     def _extract_input_variables(self):
         # 用集合保存变量名，防止重复
         variables = set()
@@ -85,7 +93,11 @@ class ChatPromptTemplate:
                 content = prompt.format(**variables)
                 # 根据角色字符串生成对应的消息对象
                 formatted_messages.append(self._create_message_from_role(role,content))
-
+            # 如果是BaseMessagePromptTemplate的实例
+            elif isinstance(msg,BaseMessagePromptTemplate):
+                formatted_messages.append(msg.format(**variables))
+            else:
+                formatted_messages.append(msg)
         return formatted_messages
 
     def _create_message_from_role(self, role, content):
@@ -126,3 +138,54 @@ class ChatPromptValue:
 
     def to_messages(self):
         return self.messages
+# 定义基础消息提示词模板类
+class BaseMessagePromptTemplate:
+    # 基础消息提示词模板类声明
+    """基础消息提示词模板类"""
+    # 构造函数，必须传入PromptTemplate实例
+    def  __init__(self,prompt: PromptTemplate):
+         # 将PromptTemplate实例保存在self.prompt属性中
+         self.prompt = prompt
+
+    # 工厂方法，利用模板字符串创建类实例
+    @classmethod
+    def from_template(cls, template: str):
+        # 通过模板字符串创建PromptTemplate对象
+        prompt = PromptTemplate.from_template(template)
+        # 用生成的PromptTemplate 创建本类实体
+        return cls(prompt=prompt)
+    def format(self, **kwargs):
+        # 使用PromptTemplate格式化内容，得到最终文本
+        content = self.prompt.format(**kwargs)
+        # 调用子类实现的方法将文本转换为对应消息的对象
+        return self._create_message(content)
+    # 抽象方法，子类必须实现，用于生成特定类型的消息对象
+    def _create_message(self, content):
+        raise NotImplementedError
+
+# 系统消息提示词模板类，继承自BaseMessagePromptTemplate
+class SystemMessagePromptTemplate(BaseMessagePromptTemplate):
+    # 系统消息提示词模板说明
+    """系统消息提示词模板"""
+    # 实现父类的_create_message 方法，返回系统消息对象
+    def _create_message(self, content):
+        # 创建并返回SystemMessage对象，内容为content
+        return SystemMessage(content = content)
+
+# 系统消息提示词模板类，继承自BaseMessagePromptTemplate
+class HumanMessagePromptTemplate(BaseMessagePromptTemplate):
+    # 系统消息提示词模板说明
+    """系统消息提示词模板"""
+    # 实现父类的_create_message 方法，返回系统消息对象
+    def _create_message(self, content):
+        # 创建并返回SystemMessage对象，内容为content
+        return HumanMessage(content = content)
+
+# 系统消息提示词模板类，继承自BaseMessagePromptTemplate
+class AIMessagePromptTemplate(BaseMessagePromptTemplate):
+    # 系统消息提示词模板说明
+    """系统消息提示词模板"""
+    # 实现父类的_create_message 方法，返回系统消息对象
+    def _create_message(self, content):
+        # 创建并返回SystemMessage对象，内容为content
+        return AIMessage(content = content)
