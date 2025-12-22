@@ -1,25 +1,40 @@
 import os
-官方的
-from langchain_deepseek import ChatDeepSeek
-from langchain.messages import HumanMessage,AIMessage,SystemMessage
-from langchain_core.prompts import PromptTemplate
+# 官方的
+# from langchain_deepseek import ChatDeepSeek
+# from langchain.messages import HumanMessage,AIMessage,SystemMessage
+# from langchain_core.prompts import PromptTemplate,ChatPromptTemplate,SystemMessagePromptTemplate,HumanMessagePromptTemplate,AIMessagePromptTemplate
 # 自己的实现
-# from smart_chain.chat_models import ChatDeepSeek
-# from smart_chain.messages import  HumanMessage,AIMessage,SystemMessage
-# from smart_chain.prompts import PromptTemplate
+from smart_chain.chat_models import ChatDeepSeek
+from smart_chain.messages import  HumanMessage,AIMessage,SystemMessage
+from smart_chain.prompts import PromptTemplate, ChatPromptTemplate
+
+# 初始对话模型客户端
 api_key = os.getenv("OPENAI_API_KEY_DEEP")
 llm = ChatDeepSeek(model="deepseek-chat", api_key=api_key)
 
-# messages = [
-#     SystemMessage(content="你是一个AI助手，请回答用户的问题"),
-#     "你好，我叫张三，你是谁？",
-#     AIMessage(content="我是deepseek,一个AI助手"),
-#     {"role": "user", "content": "你知道我叫什么吗？"},
-#     ("assistant","你的名字是张三")
-# ]
-prompt_template = PromptTemplate("你好，我叫{name},你是谁")
-print(prompt_template)
-filled_prompt = prompt_template.format(name="张三")
-print(filled_prompt)
-# result = llm.invoke(messages)
-# print(result.content, type(result))
+template = ChatPromptTemplate(
+    [
+        ("system", "你是一个乐于助人的AI机器人，你的名字叫{name}"),
+        ("human", "你好，你最近怎么怎么样？"),
+        ("ai", "我很好，谢谢你的关心"),
+        ("human", "{user_input}")
+    ]
+)
+
+prompt_value = template.invoke({
+    "name":"小助",
+    "user_input":"你叫什么名字？"
+})
+print(prompt_value, type(prompt_value))
+print(prompt_value.to_string())
+print(prompt_value.to_messages())
+
+# template = ChatPromptTemplate.from_messages([
+#     SystemMessagePromptTemplate.from_template("你是一个乐于助人的AI机器人，你的名字叫{name}"),
+#     HumanMessagePromptTemplate.from_template("你好，你最近怎么样？"),
+#     AIMessagePromptTemplate.from_template("我很好，谢谢你的关心！"),
+#     HumanMessagePromptTemplate.from_template("{user_input}")
+# ])
+#
+# prompt_messages = template.format_messages(name="小助",user_input="你叫什么名字？")
+# print(prompt_messages)

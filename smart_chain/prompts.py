@@ -1,7 +1,8 @@
 
 # 导入正则表达式模块，用于变量提取
 import re
-
+# 导入消息类
+from .messages import SystemMessage,HumanMessage,AIMessage
 # 定义提示词模板类
 class PromptTemplate:
     # 类说明文档，描述用途
@@ -40,3 +41,88 @@ class PromptTemplate:
         matches = re.findall(pattern, template)
         # 利用 dict 去重并保持顺序，最后转为列表返回
         return list(dict.fromkeys(matches))
+
+# 定义用于处理多轮对话消息模板的类
+class ChatPromptTemplate:
+    # 聊天提示词模板类，用于创建多轮对话的提示词
+    """聊天提示词模板类，用于创建多轮对话的提示词"""
+    def __init__(self,messages):
+        # 保存消息模板/对象列表
+        self.messages = messages
+        # 提取所有输入变量并存入实际变量
+        self.input_variables = self._extract_input_variables()
+    def _extract_input_variables(self):
+        # 用集合保存变量名，防止重复
+        variables = set()
+        # 遍历所有消息模板/对象
+        for msg in self.messages:
+            # 如果元素是（role,template_str）元组
+            if isinstance(msg,tuple) and len(msg) == 2:
+                _,template_str = msg
+                # 用PromptTemplate对象提取变量
+                prompt = PromptTemplate.from_template(template_str)
+                # 合并到集合中
+                variables.update(prompt.input_variables)
+        # 返回所有变量名组成的列表
+        return list(variables)
+    # 根据输入变量格式化所有消息模板，返回ChatPromptValue对象
+    def invoke(self, input_variables):
+        # 对消息模板进行实际变量填充
+        formatted_messages = self._format_all_messages(input_variables)
+        # 封装成ChatPromptValue对象返回
+        return ChatPromptValue(messages = formatted_messages)
+
+    def _format_all_messages(self,variables):
+        # 新建列表保存格式化好的消息
+        formatted_messages = []
+        # 遍历每一个消息模板/对象
+        for msg in self.messages:
+            # 若是(role, template_str)元组
+            if isinstance(msg, tuple) and len(msg) == 2:
+                role, template_str = msg
+                # 创建PromptTemplate模板并填充变量
+                prompt = PromptTemplate.from_template(template_str)
+                content = prompt.format(**variables)
+                # 根据角色字符串生成对应的消息对象
+                formatted_messages.append(self._create_message_from_role(role,content))
+
+        return formatted_messages
+
+    def _create_message_from_role(self, role, content):
+        # 角色字符串转小写做归一化
+        normalized_role = role.lower()
+        if normalized_role == "system":
+            return SystemMessage(content=content)
+        elif normalized_role == "human":
+            return HumanMessage(content=content)
+        elif normalized_role == "ai":
+            return AIMessage(content=content)
+        # 如果角色未知，则抛出异常
+        raise ValueError(f"未知的消息角色: {role}")
+# 定义一个用于存放格式化后的消息的类
+class ChatPromptValue:
+    # 聊天提示词值类，包含格式化后的消息列表
+    """聊天提示词值类，包含格式化后的消息列表"""
+    def __init__(self,messages):
+        # 保存消息列表到实体变量
+        self.messages = messages
+    def to_string(self):
+        # 新建一个用于存放字符串的列表
+        parts = []
+        for msg in self.messages:
+            if hasattr(msg, "type") and hasattr(msg, "content"):
+                role_map = {
+                    "system": "System",
+                    "human": "Human",
+                    "ai": "AI"
+                }
+                # 获取对应的角色字符串，没有则首字母大写
+                role = role_map.get(msg.type, msg.type.capitalize())
+#               # 拼接角色和消息内容
+                parts.append(f"{role}:{msg.content}")
+            else:
+                parts.append(str(msg))
+        return "\n".join(parts)
+
+    def to_messages(self):
+        return self.messages
