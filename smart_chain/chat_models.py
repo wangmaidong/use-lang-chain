@@ -7,7 +7,7 @@ from langchain_classic.chains.question_answering.map_reduce_prompt import messag
 
 # 从 .messages 模块导入 AIMessage、HumanMessage 和 SystemMessage 类
 from .messages import AIMessage,HumanMessage,SystemMessage
-
+from .prompts import ChatPromptValue
 # 定义与OpenAI聊天交互的类
 class ChatOpenAI:
     # 初始化方法
@@ -211,6 +211,8 @@ class ChatDeepSeek:
            list[dict]: API 格式的消息列表
        """
        # 如果输入是字符串，直接作为用户消息
+       if isinstance(input,ChatPromptValue):
+            input = input.to_messages()
        if isinstance(input, str):
            return [{"role": "user", "content": input}]
        # 如果输入的类型是列表

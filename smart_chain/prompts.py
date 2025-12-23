@@ -1,6 +1,9 @@
 
 # 导入正则表达式模块，用于变量提取
 import re
+
+from pyexpat.errors import messages
+
 # 导入消息类
 from .messages import SystemMessage,HumanMessage,AIMessage
 # 定义提示词模板类
@@ -71,6 +74,10 @@ class ChatPromptTemplate:
                 prompt = PromptTemplate.from_template(template_str)
                 # 合并到集合中
                 variables.update(prompt.input_variables)
+            elif isinstance(msg, BaseMessagePromptTemplate):
+                variables.update(msg.prompt.input_variables)
+            elif isinstance(msg, MessagesPlaceholder):
+                variables.update(msg.variable_name)
         # 返回所有变量名组成的列表
         return list(variables)
     # 根据输入变量格式化所有消息模板，返回ChatPromptValue对象
@@ -96,6 +103,12 @@ class ChatPromptTemplate:
             # 如果是BaseMessagePromptTemplate的实例
             elif isinstance(msg,BaseMessagePromptTemplate):
                 formatted_messages.append(msg.format(**variables))
+            # 如果是占位符对象
+            elif isinstance(msg,MessagesPlaceholder):
+                placeholder_messages = self._coerce_placeholder_value(
+                    msg.variable_name, variables.get(msg.variable_name)
+                )
+                formatted_messages.extend(placeholder_messages)
             else:
                 formatted_messages.append(msg)
         return formatted_messages
@@ -111,7 +124,39 @@ class ChatPromptTemplate:
             return AIMessage(content=content)
         # 如果角色未知，则抛出异常
         raise ValueError(f"未知的消息角色: {role}")
-# 定义一个用于存放格式化后的消息的类
+    def _coerce_placeholder_value(self, variable_name, value):
+        if isinstance(value, list):
+            messages = []
+            for msg in value:
+                # 如果是已有消息类型，直接返回
+                if isinstance(msg, (SystemMessage, HumanMessage, AIMessage)):
+                    messages.append(msg)
+                # 有type 和 content属性，也有消息对象直接返回
+                elif hasattr(msg, "type") and hasattr(msg, "content"):
+                    messages.append(msg)
+                # 字符串变为人类消息
+                elif isinstance(msg, str):
+                    messages.append(HumanMessage(content=msg))
+                # 如果是元组(role,content)转为指定角色的消息
+                elif isinstance(msg, tuple) and len(msg) == 2:
+                    role, content = msg
+                    # 根据role和content生成对应的消息对象
+                    messages.append(self._create_message_from_role(role, content))
+                # 字典，默认user角色
+                elif isinstance(msg, dict):
+                    # 获取role和content
+                    role = msg.get("role", "user")
+                    # 获取content
+                    content = msg.get("content", "")
+                    # 根据role和content生成对应的消息对象
+                    messages.append(self._create_message_from_role(role, content))
+                else:
+                    # 其他无法识别类型，抛出异常
+                    raise TypeError("无法将占位符内容转换为消息")
+            return messages
+        else:
+            raise ValueError("variable history should be a list of base messages")
+    # 定义一个用于存放格式化后的消息的类
 class ChatPromptValue:
     # 聊天提示词值类，包含格式化后的消息列表
     """聊天提示词值类，包含格式化后的消息列表"""
@@ -189,3 +234,10 @@ class AIMessagePromptTemplate(BaseMessagePromptTemplate):
     def _create_message(self, content):
         # 创建并返回SystemMessage对象，内容为content
         return AIMessage(content = content)
+
+# 定义动态消息列表占位符类
+class MessagesPlaceholder:
+    # 在聊天模板中插入动态消息列表的占位符
+    """在聊天模板中插入动态消息列表的占位符"""
+    def __init__(self,variable_name:str):
+        self.variable_name = variable_name
