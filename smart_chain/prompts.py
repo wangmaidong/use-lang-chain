@@ -105,7 +105,7 @@ class ChatPromptTemplate:
                 formatted_messages.append(msg.format(**variables))
             # 如果是占位符对象
             elif isinstance(msg,MessagesPlaceholder):
-                placeholder_messages = self._coerce_placeholder_value(
+                placeholder_messages = self._get_placeholder_value(
                     msg.variable_name, variables.get(msg.variable_name)
                 )
                 formatted_messages.extend(placeholder_messages)
@@ -124,39 +124,33 @@ class ChatPromptTemplate:
             return AIMessage(content=content)
         # 如果角色未知，则抛出异常
         raise ValueError(f"未知的消息角色: {role}")
-    def _coerce_placeholder_value(self, variable_name, value):
-        if isinstance(value, list):
-            messages = []
-            for msg in value:
-                # 如果是已有消息类型，直接返回
-                if isinstance(msg, (SystemMessage, HumanMessage, AIMessage)):
-                    messages.append(msg)
-                # 有type 和 content属性，也有消息对象直接返回
-                elif hasattr(msg, "type") and hasattr(msg, "content"):
-                    messages.append(msg)
-                # 字符串变为人类消息
-                elif isinstance(msg, str):
-                    messages.append(HumanMessage(content=msg))
-                # 如果是元组(role,content)转为指定角色的消息
-                elif isinstance(msg, tuple) and len(msg) == 2:
-                    role, content = msg
-                    # 根据role和content生成对应的消息对象
-                    messages.append(self._create_message_from_role(role, content))
-                # 字典，默认user角色
-                elif isinstance(msg, dict):
-                    # 获取role和content
-                    role = msg.get("role", "user")
-                    # 获取content
-                    content = msg.get("content", "")
-                    # 根据role和content生成对应的消息对象
-                    messages.append(self._create_message_from_role(role, content))
-                else:
-                    # 其他无法识别类型，抛出异常
-                    raise TypeError("无法将占位符内容转换为消息")
-            return messages
+    def _get_placeholder_value(self, variable_name, value):
+        if value is None:
+            raise ValueError(f"MessagePlaceHolder {variable_name} 对应的值缺失")
+        if isinstance(value, ChatPromptValue):
+            return value.to_messages()
+        elif isinstance(value,list):
+            return [self._get_single_message(item) for item in value]
         else:
-            raise ValueError("variable history should be a list of base messages")
-    # 定义一个用于存放格式化后的消息的类
+            return [self._get_single_message(value)]
+    def _get_single_message(self, value):
+        if isinstance(value,(SystemMessage, HumanMessage,AIMessage)):
+            return value
+        elif hasattr(value, "type") and hasattr(value, "content"):
+            return value
+        elif isinstance(value, str):
+            return HumanMessage(content=value)
+        elif isinstance(value, tuple):
+            role, content = value
+            return self._create_message_from_role(role,content)
+        elif isinstance(value, dict):
+            role = value.get("role", "user")
+            content = value.get("content", "")
+            return self._create_message_from_role(role,content)
+        else:
+            raise TypeError("无法将占位符的内容转化为消息")
+
+# 定义一个用于存放格式化后的消息的类
 class ChatPromptValue:
     # 聊天提示词值类，包含格式化后的消息列表
     """聊天提示词值类，包含格式化后的消息列表"""
@@ -241,3 +235,34 @@ class MessagesPlaceholder:
     """在聊天模板中插入动态消息列表的占位符"""
     def __init__(self,variable_name:str):
         self.variable_name = variable_name
+
+class FewShotPromptTemplate:
+    # 文档字符串：说明该类用于构造 few-shot 提示词的模板
+    """用于构造few-shot 提示词模板"""
+    # 构造方法，初始化类的各种属性
+    def __init__(
+            self,
+            *,
+            examples: list[dict] = None,
+            example_prompt: PromptTemplate | str,
+            prefix: str = "",
+            suffix: str = "",
+            example_separator: str = "\n\n",
+            input_variables: list[str] | None = None
+    ):
+        # 如果未传入 examples，默认使用空列表
+        self.examples = examples or []
+        # 判断 example_prompt 是否为 PromptTemplate 类型
+        if isinstance(example_prompt, PromptTemplate):
+            # 如果是 PromptTemplate 直接赋值
+            self.example_prompt = example_prompt
+        else:
+            self.example_prompt = PromptTemplate.from_template(example_prompt)
+        # 保留前缀
+        self.prefix = prefix
+        # 保留后缀
+        self.suffix = suffix
+        # 保存示例分割符
+        self.example_separator = example_separator
+        # 如果未指定输入变量，则自动根据前后缀推断变量名
+        self.input_variables = input_variables or self._infer_input_variables()
