@@ -1,0 +1,4 @@
+{
+  "_type": "prompt",
+  "template": "你是一个乐于助人的AI助手，用户问：{question},请回答："
+}

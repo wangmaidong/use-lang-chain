@@ -2,24 +2,30 @@
 # 导入正则表达式模块，用于变量提取
 import re
 
-from pyexpat.errors import messages
+from langchain_classic.chains.qa_generation.prompt import templ
 
 # 导入消息类
 from .messages import SystemMessage,HumanMessage,AIMessage
+# 导入解析json模块
+import json
+# 导入路径分析模块
+from pathlib import Path
 # 定义提示词模板类
 class PromptTemplate:
     # 类说明文档，描述用途
     """提示词模板类，用于格式化字符串模板"""
 
     # 构造方法，初始化模板实例
-    def __init__(self, template: str):
+    def __init__(self, template: str, partial_variables: dict = None):
         # 保存模板字符串到实例属性
         self.template = template
+        # 保存部分变量（已预填充的变量）
+        self.partial_variables = partial_variables or {}
         # 调用内部方法提取模板中的变量名列表
         input_variables = self._extract_variables(template)
         # 将变量名列表分配给实例属性
-        self.input_variables = input_variables
-
+        # self.input_variables = input_variables
+        self.input_variables = [v for v in input_variables if v not in self.partial_variables]
     # 类方法：从模板字符串生成 PromptTemplate 实例
     @classmethod
     def from_template(cls, template: str):
@@ -28,13 +34,15 @@ class PromptTemplate:
 
     # 格式化填充模板中的变量
     def format(self, **kwargs):
+        # 合并部分变量和用户提供的变量
+        all_vars = {**self.partial_variables, **kwargs}
         # 计算模板中缺失但未传入的变量名集合
         missing_vars = set(self.input_variables) - set(kwargs.keys())
         # 如果存在缺失变量则抛出异常，提示哪些变量缺失
         if missing_vars:
             raise ValueError(f"缺少必需的变量: {missing_vars}")
         # 使用传入参数填充模板并返回格式化后的字符串
-        return self.template.format(**kwargs)
+        return self.template.format(**all_vars)
 
     # 内部方法：从模板字符串中提取变量名
     def _extract_variables(self, template: str):
@@ -44,6 +52,22 @@ class PromptTemplate:
         matches = re.findall(pattern, template)
         # 利用 dict 去重并保持顺序，最后转为列表返回
         return list(dict.fromkeys(matches))
+
+    # 定义部分填充模板变量的方法，返回新的模板实例
+    def partial(self, **kwargs):
+        """
+        部分填充模板变量，返回一个新的 PromptTemplate 实例
+        **kwargs: 要部分填充的变量及其值
+        Returns: 新的 PromptTemplate 实例，其中指定的变量已被填充
+        """
+        # 合并现有对象的部分变量（partial_variables）和本次要填充的新变量
+        new_partial_variables = {**self.partial_variables, **kwargs}
+        # 使用原模板字符串和更新后的部分变量，创建新的 PromptTemplate 实例
+        new_template = PromptTemplate(
+            template= self.template,
+            partial_variables = new_partial_variables
+        )
+        return new_template
 
 # 定义用于处理多轮对话消息模板的类
 class ChatPromptTemplate:
@@ -266,3 +290,88 @@ class FewShotPromptTemplate:
         self.example_separator = example_separator
         # 如果未指定输入变量，则自动根据前后缀推断变量名
         self.input_variables = input_variables or self._infer_input_variables()
+
+    # 私有方法：推断前缀和后缀出现的模板变量名
+    def _infer_input_variables(self) -> list[str]:
+        # 新建一个集合用于保存变量名去重
+        variables = set()
+        # 提取 prefix 中引用的变量名
+        variables.update(self._extract_vars(self.prefix))
+        # 提取 suffix 中引用的变量名
+        variables.update(self._extract_vars(self.suffix))
+        # 转换为列表返回
+        return list(variables)
+    # 私有方法：提取文本中的所有花括号包裹的模板变量名
+    def _extract_vars(self, text: str) -> list[str]:
+        # 如果输入空字符床，直接返回空列表
+        if not text:
+            return []
+        # 定义正则表达式，匹配 {变量名} 或 {变量名:格式}
+        pattern = r"\{([^}:]+)(?::[^}]+)?\}"
+        # 使用 re.findall 提取所有变量名
+        matches = re.findall(pattern, text)
+        # 去重并保持顺序返回变量名列表
+        return list(dict.fromkeys(matches))
+    # 格式化 few-shot 提示词， 返回完整字符串
+    def format(self, **kwargs) -> str:
+        """
+        根据传入的变量生成完整的 few-shot 提示词文本
+        **kwargs: 输入变量，可选，供示例选择
+        """
+        # 判断必需的变量是否全部传入，缺失时抛异常
+        missing = set(self.input_variables) - set(kwargs.keys())
+        if missing:
+            raise ValueError(f"缺少必需的变量：{missing}")
+        # 新建 parts 列表，用于拼接完整提示词的各部分内容
+        parts: list[str] = []
+        # 如果前缀不为空，格式化后加入parts
+        if self.prefix:
+            parts.append(self._format_text(self.prefix, **kwargs))
+        # 调用 format_examples 得到所有示例的字符串，并用分隔符拼接在一起
+        example_block = self.example_separator.join(self._format_examples(kwargs))
+        # 如果 example_block 不为空字符串，加入 parts
+        if example_block:
+            parts.append(example_block)
+        # 如果后缀不为空，格式化后加入 parts
+        if self.suffix:
+            parts.append(self._format_text(self.suffix, **kwargs))
+        # 用示例分隔符连接所有组成部分，过滤空字符串
+        return self.example_separator.join(part for part in parts if part)
+
+    # 私有方法：用 PromptTemplate 对 text 进行格式化
+    def _format_text(self,text: str ,**kwargs):
+        # 先创建 PromptTempalte 实例
+        temp_prompt = PromptTemplate.from_template(text)
+        # 用传入参数格式化
+        return temp_prompt.format(**kwargs)
+    # 格式化所有示例，返回字符串列表
+    def _format_examples(self, input_variables: dict = None) -> list[str]:
+        """返回格式化后的示例字符串列表"""
+        # 新建存放格式化后示例的列表
+        formatted = []
+        # 遍历 every example 字典
+        for example in self.examples:
+            # 用 example_propmt 对当前示例格式化
+            formatted.append(self.example_prompt.format(**example))
+        return formatted
+
+# 定义一个从文件加载提示词模板的函数
+def load_prompt(path:str | Path, encoding:str | None = None) ->PromptTemplate:
+     # 将传入的路径参数转换为 Path 对象，方便后续进行文件操作
+     file_path = Path(path)
+     # 判断文件是否存在，如果不存在则抛出FileNotFoundError 异常
+     if not file_path.exists():
+         raise FileNotFoundError(f"提示词文件不存在: {path}")
+     # 判断文件扩展名是否为 .json 如果不是则抛出ValueError错误
+     if file_path.suffix != ".json":
+         raise ValueError(f"只支持 .json 格式文件，当前文件: {file_path.suffix}")
+     # 打开文件，使用指定编码（一般为 utf-8），并读取 JSON 配置信息到 config 变量
+     with file_path.open(encoding=encoding) as f:
+         config = json.load(f)
+     config_type = config.get("type", "prompt")
+     if config_type != "prompt":
+         raise ValueError(f"不支持的提示词类型: {config_type}，当前只支持 'prompt'")
+     template = config.get("template")
+     if template is None:
+         raise ValueError("配置文件中缺少 'template' 字段")
+     return PromptTemplate.from_template(template)
