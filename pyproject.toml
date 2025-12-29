@@ -5,12 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "black>=25.12.0",
     "dashscope>=1.25.5",
     "faiss-cpu>=1.13.1",
     "jieba>=0.42.1",
     "langchain>=1.2.0",
     "langchain-community>=0.4.1",
     "langchain-deepseek>=1.0.1",
+    "langchain-huggingface>=1.2.0",
     "langchain-openai>=1.1.6",
+    "numpy>=2.3.5",
     "openai>=2.14.0",
+    "sentence-transformers>=5.2.0",
 ]
