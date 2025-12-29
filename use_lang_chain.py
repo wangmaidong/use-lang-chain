@@ -2,23 +2,9 @@ import os
 from sys import prefix
 
 # 官方的
-from langchain_deepseek import ChatDeepSeek
-from langchain.messages import HumanMessage,AIMessage,SystemMessage
-from langchain_core.prompts import (
-    PromptTemplate,
-    ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-    AIMessagePromptTemplate,
-    MessagesPlaceholder,
-    FewShotPromptTemplate,
-    load_prompt
-)
-from langchain_core.example_selectors import LengthBasedExampleSelector
-# 自己的实现
-# from smart_chain.chat_models import ChatDeepSeek
-# from smart_chain.messages import  HumanMessage,AIMessage,SystemMessage
-# from smart_chain.prompts import (
+# from langchain_deepseek import ChatDeepSeek
+# from langchain.messages import HumanMessage,AIMessage,SystemMessage
+# from langchain_core.prompts import (
 #     PromptTemplate,
 #     ChatPromptTemplate,
 #     SystemMessagePromptTemplate,
@@ -28,6 +14,21 @@ from langchain_core.example_selectors import LengthBasedExampleSelector
 #     FewShotPromptTemplate,
 #     load_prompt
 # )
+# from langchain_core.example_selectors import LengthBasedExampleSelector
+# 自己的实现
+from smart_chain.chat_models import ChatDeepSeek
+from smart_chain.messages import  HumanMessage,AIMessage,SystemMessage
+from smart_chain.prompts import (
+    PromptTemplate,
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+    AIMessagePromptTemplate,
+    MessagesPlaceholder,
+    FewShotPromptTemplate,
+    load_prompt
+)
+from smart_chain.example_selectors import LengthBasedExampleSelector
 
 # 初始对话模型客户端
 api_key = os.getenv("OPENAI_API_KEY_DEEP")
@@ -51,7 +52,7 @@ example_prompt = PromptTemplate.from_template(
 selector = LengthBasedExampleSelector(
     examples=examples,
     example_prompt=example_prompt,
-    max_length=15
+    max_length=50
 )
 
 # 构造两个用于测试的不同长度的输入，用于观察选择器行为
@@ -69,7 +70,7 @@ few_shot_prompt = FewShotPromptTemplate(
     example_selector=selector
 )
 # 使用 FewShotPromptTemplate 格式化文本，实际填充示例和用户输入
-formatted = few_shot_prompt.format(user_question="7 plus 7等于多少？")
+formatted = few_shot_prompt.format(user_question="6 plus 6等于多少？")
 
 # 打印出格式化好的 prompt，方便检查示例引用和输入拼接效果
 print(formatted)

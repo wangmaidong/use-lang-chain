@@ -272,8 +272,13 @@ class FewShotPromptTemplate:
             prefix: str = "",
             suffix: str = "",
             example_separator: str = "\n\n",
-            input_variables: list[str] | None = None
+            input_variables: list[str] | None = None,
+            example_selector = None, # 示例选择器（可选）
     ):
+        if examples is None and example_selector is None:
+            raise ValueError(f"必须提供examples或example_selector中的一项")
+        if example_selector is not None and examples is not None:
+            raise ValueError(f"不能同时提供examples和example_selector，只能选择其中一个")
         # 如果未传入 examples，默认使用空列表
         self.examples = examples or []
         # 判断 example_prompt 是否为 PromptTemplate 类型
@@ -288,6 +293,8 @@ class FewShotPromptTemplate:
         self.suffix = suffix
         # 保存示例分割符
         self.example_separator = example_separator
+        # 保存示例选择实例
+        self.example_selector = example_selector
         # 如果未指定输入变量，则自动根据前后缀推断变量名
         self.input_variables = input_variables or self._infer_input_variables()
 
@@ -327,8 +334,14 @@ class FewShotPromptTemplate:
         # 如果前缀不为空，格式化后加入parts
         if self.prefix:
             parts.append(self._format_text(self.prefix, **kwargs))
-        # 调用 format_examples 得到所有示例的字符串，并用分隔符拼接在一起
-        example_block = self.example_separator.join(self._format_examples(kwargs))
+        # 如果存在示例选择实例
+        if self.example_selector:
+            example_block = self.example_separator.join(
+                self._format_examples(input_variables=kwargs)
+            )
+        else:
+            # 调用 format_examples 得到所有示例的字符串，并用分隔符拼接在一起
+            example_block = self.example_separator.join(self._format_examples(kwargs))
         # 如果 example_block 不为空字符串，加入 parts
         if example_block:
             parts.append(example_block)
@@ -347,13 +360,17 @@ class FewShotPromptTemplate:
     # 格式化所有示例，返回字符串列表
     def _format_examples(self, input_variables: dict = None) -> list[str]:
         """返回格式化后的示例字符串列表"""
+        if self.example_selector:
+            selected_examples = self.example_selector.select_examples(input_variables)
+        else:
+            selected_examples = self.examples
         # 新建存放格式化后示例的列表
-        formatted = []
+        formatted_examples = []
         # 遍历 every example 字典
-        for example in self.examples:
+        for example in selected_examples:
             # 用 example_propmt 对当前示例格式化
-            formatted.append(self.example_prompt.format(**example))
-        return formatted
+            formatted_examples.append(self.example_prompt.format(**example))
+        return formatted_examples
 
 # 定义一个从文件加载提示词模板的函数
 def load_prompt(path:str | Path, encoding:str | None = None) ->PromptTemplate:
