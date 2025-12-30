@@ -48,12 +48,15 @@ def mmr_select(query_vector, doc_vectors, k=3, lambda_mult=0.5):
         # 将选中的文档添加到已选文档中
         selected.append(best_idx)
     return selected
+
+
 # 定义Document 文档对象类
 class Document:
     """
     文档类，存储内容，元数据和嵌入向量
     """
-    def __init__(self,page_content:str, metadata=None,embedding_value=None):
+
+    def __init__(self, page_content: str, metadata=None, embedding_value=None):
         # 初始化文档内容
         self.page_content = page_content
         # 初始化元数据，默认空字典
@@ -61,31 +64,36 @@ class Document:
         # 初始化嵌入向量
         self.embedding_value = embedding_value
 
+
 class VectorStore(ABC):
     # 向量存储抽象基类
     # 抽象方法
     @abstractmethod
-    def add_texts(
-            self,
-            texts,
-            metadatas = None
-    ):
+    def add_texts(self, texts, metadatas=None):
         pass
+
     # 抽象方法，最大边际相关性检索
     @abstractmethod
-    def max_marginal_relevance_search(self,query:str,k:int=4,fetch_k:int=20):
+    def max_marginal_relevance_search(self, query: str, k: int = 4, fetch_k: int = 20):
         pass
+
     # 抽象类方法，从文本批量构建向量存储
     @classmethod
     @abstractmethod
-    def from_texts(cls,texts,embeddings,metadatas=None):
+    def from_texts(cls, texts, embeddings, metadatas=None):
         # 批量通过文本构建向量存储的抽象方法，由子类实现
         pass
+
+    @abstractmethod
+    def similarity_search(self, query: str, k: int = 4):
+        """相似度搜索"""
+        pass
+
 
 # 定义FAISS向量存储类，继承自VectorStore
 class FAISS(VectorStore):
     # FAISS向量存储实现
-    def __init__(self,embeddings):
+    def __init__(self, embeddings):
         # 保存嵌入模型
         self.embeddings = embeddings
         # 初始化FAISS索引为空
@@ -94,11 +102,7 @@ class FAISS(VectorStore):
         self.documents_by_id = {}
 
     # 添加文本到向量存储
-    def add_texts(
-            self,
-            texts,
-            metadatas = None
-    ):
+    def add_texts(self, texts, metadatas=None):
         """
         添加文本到向量存储
         :param texts: 文本
@@ -120,24 +124,89 @@ class FAISS(VectorStore):
         self.index.add(embedding_values)
         # 获取已知的文档数量，用于新文档的编号
         start_index = len(self.documents_by_id)
-        for i,(text, metadata,embedding_value) in enumerate(
+        for i, (text, metadata, embedding_value) in enumerate(
             zip(texts, metadatas, embedding_values)
         ):
             # 构建文档ID
             doc_id = str(start_index + i)
             # 构建文档对象
             doc = Document(
-                page_content=text,
-                metadata=metadata,
-                embedding_value=embedding_value
+                page_content=text, metadata=metadata, embedding_value=embedding_value
             )
             self.documents_by_id[doc_id] = doc
+
     @classmethod
-    def from_texts(cls,texts,embeddings,metadatas=None):
+    def from_texts(cls, texts, embeddings, metadatas=None):
         instance = cls(embeddings=embeddings)
-        instance.add_texts(texts,metadatas=metadatas)
+        instance.add_texts(texts, metadatas=metadatas)
         return instance
 
+    def max_marginal_relevance_search(self, query, k, fetch_k, lambda_mult=0.5):
+        # 获取查询文本的嵌入向量
+        query_embedding = self.embeddings.embed_query(query)
+        # 用FAISS索引检索出fetch_k个候选文档（距离最近）
+        query_vectors = np.array([query_embedding], dtype=np.float32)
+        # 用FAISS索引检索出fetch_k个候选文档（距离最近）
+        if isinstance(self.index, faiss.Index):
+            # 执行检索，返回索引及距离
+            _, indices = self.index.search(query_vectors, fetch_k)
+            # 获取候选文档对应的索引列表
+            candidate_indices = indices[0]
+        else:
+            raise RuntimeError("FAISS 不可用")
+        # 如果说候选文档数不足K个，则直接返回这些文档，不需要再走MMR了
+        if len(candidate_indices) <= k:
+            docs = []
+            for idx in candidate_indices:
+                doc_id = str(idx)
+                if doc_id in self.documents_by_id:
+                    docs.append(self.documents_by_id[doc_id])
+            return docs
+        # 从candidate_indices用MMR算法挑选出K个元素
+        # 从字典中提取候选文档的嵌入向量 5个
+        candidate_vectors = np.array(
+            [self.documents_by_id[str(i)].embedding_value for i in candidate_indices],
+            dtype=np.float32,
+        )
+        # 通过MMR算法获取MMR选出的下标
+        selected_indices = mmr_select(
+            query_embedding, candidate_vectors, k=k, lambda_mult=lambda_mult
+        )
+        # 根据下标选出最终的文档对象
+        docs = []
+        # 遍历选中的索引，这个索引candidate_indices 列表中的索引
+        for idx in selected_indices:
+            # 获取真实的文档索引或者说文档ID
+            doc_id = str(candidate_indices[idx])
+            # 通过真实的文档ID找到对应的文档对象
+            if doc_id in self.documents_by_id:
+                docs.append(self.documents_by_id[doc_id])
+        return docs
 
+    # 定义相似度检索方法，返回与查询最近的k个文档
+    def similarity_search(self, query: str, k: int = 4):
+        """
+        相似度搜索
+        Args:
+            query: 查询文本
+            k: 返回的文档数量
 
-
+        Returns:
+            List[Document]: 最相似的文档列表
+        """
+        # 获取查询文本的嵌入向量
+        query_embedding = self.embeddings.embed_query(query)
+        # 将嵌入的向量转换为Numpy的二维数组
+        query_vector = np.array([query_embedding], dtype=np.float32)
+        # 用FAISS索引执行k近邻检索，得到距离最近的k个索引
+        _, indices = self.index.search(query_vector, k)
+        # 创建用于存放检索文件到文档对象的列表
+        docs = []
+        # 遍历返回的每个文档索引
+        for idx in indices[0]:
+            # 把数字索引转换为字符串形式的文档id
+            doc_id = str(idx)
+            # 只有字典中存放在这个id的文档才能加入最终结果
+            if doc_id in self.documents_by_id:
+                docs.append(self.documents_by_id[doc_id])
+        return docs

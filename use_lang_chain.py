@@ -1,9 +1,11 @@
 import os
 from sys import prefix
 
+from torchgen.operator_versions.gen_mobile_upgraders import construct_operators
+
 # 官方的
 from langchain_deepseek import ChatDeepSeek
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import (
@@ -19,12 +21,12 @@ from langchain_core.prompts import (
 from langchain_core.example_selectors import (
     LengthBasedExampleSelector,
     MaxMarginalRelevanceExampleSelector,
+    SemanticSimilarityExampleSelector,
 )
-from openai import embeddings
 
 # 自己的实现
 # from smart_chain.chat_models import ChatDeepSeek
-# from smart_chain.messages import  HumanMessage,AIMessage,SystemMessage
+# from smart_chain.messages import HumanMessage, AIMessage, SystemMessage
 # from smart_chain.prompts import (
 #     PromptTemplate,
 #     ChatPromptTemplate,
@@ -33,9 +35,15 @@ from openai import embeddings
 #     AIMessagePromptTemplate,
 #     MessagesPlaceholder,
 #     FewShotPromptTemplate,
-#     load_prompt
+#     load_prompt,
 # )
-# from smart_chain.example_selectors import LengthBasedExampleSelector
+# from smart_chain.example_selectors import (
+#     LengthBasedExampleSelector,
+#     MaxMarginalRelevanceExampleSelector,
+# )
+# from smart_chain.embeddings import HuggingFaceEmbeddings
+# from smart_chain.vectorstores import FAISS
+
 # 初始对话模型客户端
 api_key = os.getenv("OPENAI_API_KEY_DEEP")
 llm = ChatDeepSeek(model="deepseek-chat", api_key=api_key)
@@ -85,10 +93,8 @@ examples = [
 ]
 example_prompt = PromptTemplate.from_template("问题：{question}\n答案：{answer}")
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-# 利用MMR算法和FAISS，通过from_examples方法构建最大边际相关性选择器
-selector = MaxMarginalRelevanceExampleSelector.from_examples(
-    examples=examples, embeddings=embeddings, vectorstore_cls=FAISS, k=3, fetch_k=5
+selector = SemanticSimilarityExampleSelector.from_examples(
+    examples=examples, embeddings=embeddings, vectorstore_cls=FAISS, k=3
 )
 few_shot_prompt = FewShotPromptTemplate(
     example_prompt=example_prompt,

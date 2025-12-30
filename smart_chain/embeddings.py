@@ -62,7 +62,7 @@ class OpenAIEmbeddings(Embedding):
 
 
 # HuggingFace嵌入模型封装
-class HuggingfaceEmbeddings(Embedding):
+class HuggingFaceEmbeddings(Embedding):
     # 初始化方法，支持自定义模型和其他参数
     def __init__(self, model_name="sentence-transformers/all-MiniLM-L6-v2", **kwargs):
         """
