@@ -1,8 +1,9 @@
-import numpy as np
+from smart_chain.embeddings import HuggingfaceEmbeddings,OpenAIEmbeddings
 
-arr = [1, 2, 34, 5]
+# huggingface = HuggingfaceEmbeddings()
+# embedding_res = huggingface.embed_query('我在努力学习python')
+# print(embedding_res)
 
-arr_np = np.array(arr)
+openai = OpenAIEmbeddings()
 
-print(f"arr{arr}")
-print(f"arr_np{arr_np}")
+print(openai.embed_query('我在努力学习python'))
