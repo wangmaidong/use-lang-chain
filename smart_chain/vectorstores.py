@@ -2,6 +2,7 @@ import os
 import numpy as np
 from abc import ABC, abstractmethod
 import faiss
+from openai import embeddings
 
 
 # 计算一个向量与多个向量的余弦相似度
@@ -47,3 +48,96 @@ def mmr_select(query_vector, doc_vectors, k=3, lambda_mult=0.5):
         # 将选中的文档添加到已选文档中
         selected.append(best_idx)
     return selected
+# 定义Document 文档对象类
+class Document:
+    """
+    文档类，存储内容，元数据和嵌入向量
+    """
+    def __init__(self,page_content:str, metadata=None,embedding_value=None):
+        # 初始化文档内容
+        self.page_content = page_content
+        # 初始化元数据，默认空字典
+        self.metadata = metadata or {}
+        # 初始化嵌入向量
+        self.embedding_value = embedding_value
+
+class VectorStore(ABC):
+    # 向量存储抽象基类
+    # 抽象方法
+    @abstractmethod
+    def add_texts(
+            self,
+            texts,
+            metadatas = None
+    ):
+        pass
+    # 抽象方法，最大边际相关性检索
+    @abstractmethod
+    def max_marginal_relevance_search(self,query:str,k:int=4,fetch_k:int=20):
+        pass
+    # 抽象类方法，从文本批量构建向量存储
+    @classmethod
+    @abstractmethod
+    def from_texts(cls,texts,embeddings,metadatas=None):
+        # 批量通过文本构建向量存储的抽象方法，由子类实现
+        pass
+
+# 定义FAISS向量存储类，继承自VectorStore
+class FAISS(VectorStore):
+    # FAISS向量存储实现
+    def __init__(self,embeddings):
+        # 保存嵌入模型
+        self.embeddings = embeddings
+        # 初始化FAISS索引为空
+        self.index = None
+        # 初始化文档字典，键为文档id，值为Document对象
+        self.documents_by_id = {}
+
+    # 添加文本到向量存储
+    def add_texts(
+            self,
+            texts,
+            metadatas = None
+    ):
+        """
+        添加文本到向量存储
+        :param texts: 文本
+        :param metadatas: 元数据
+        :return: None
+        """
+        # 如果未传入元数据，则使用空字典列表
+        if metadatas is None:
+            metadatas = [{}] * len(texts)
+        # 利用嵌入模型生成文本的嵌入向量
+        embedding_values = self.embeddings.embed_documents(texts)
+        # 转换成float32类型的NumPy数组
+        embedding_values = np.array(embedding_values, dtype=np.float32)
+        # 若还未建立FAISS索引，则新建索引
+        if self.index is None:
+            dimension = len(embedding_values[0])
+            self.index = faiss.IndexFlatL2(dimension)
+        # 添加嵌入向量到FAISS索引库中
+        self.index.add(embedding_values)
+        # 获取已知的文档数量，用于新文档的编号
+        start_index = len(self.documents_by_id)
+        for i,(text, metadata,embedding_value) in enumerate(
+            zip(texts, metadatas, embedding_values)
+        ):
+            # 构建文档ID
+            doc_id = str(start_index + i)
+            # 构建文档对象
+            doc = Document(
+                page_content=text,
+                metadata=metadata,
+                embedding_value=embedding_value
+            )
+            self.documents_by_id[doc_id] = doc
+    @classmethod
+    def from_texts(cls,texts,embeddings,metadatas=None):
+        instance = cls(embeddings=embeddings)
+        instance.add_texts(texts,metadatas=metadatas)
+        return instance
+
+
+
+
