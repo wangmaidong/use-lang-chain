@@ -1,7 +1,4 @@
 import os
-from sys import prefix
-
-from torchgen.operator_versions.gen_mobile_upgraders import construct_operators
 
 # 官方的
 from langchain_deepseek import ChatDeepSeek
