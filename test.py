@@ -1,9 +1,9 @@
-from smart_chain.embeddings import HuggingfaceEmbeddings,OpenAIEmbeddings
+from collections import namedtuple
 
-# huggingface = HuggingfaceEmbeddings()
-# embedding_res = huggingface.embed_query('我在努力学习python')
-# print(embedding_res)
-
-openai = OpenAIEmbeddings()
-
-print(openai.embed_query('我在努力学习python'))
+ConfigurableField = namedtuple(
+    "ConfigurableField",
+    ["id", "name", "description", "annotation", "is_shared"],
+    defaults=(None, None, None, False),
+)
+config = ConfigurableField()
+print(config)
