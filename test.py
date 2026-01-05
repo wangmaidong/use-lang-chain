@@ -1,9 +1,8 @@
-from collections import namedtuple
+class Animal:
+    def __init__(self, name):
+        self.name = name
 
-ConfigurableField = namedtuple(
-    "ConfigurableField",
-    ["id", "name", "description", "annotation", "is_shared"],
-    defaults=(None, None, None, False),
-)
-config = ConfigurableField()
-print(config)
+
+dog = Animal("小狗")
+
+print(dog.__class__.__name__)

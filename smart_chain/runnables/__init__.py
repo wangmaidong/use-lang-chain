@@ -8,3 +8,4 @@ from .configurable import (
     ConfigurableField,
     RunnableConfigurableAlternatives,
 )
+from .message_history import RunnableWithMessageHistory
