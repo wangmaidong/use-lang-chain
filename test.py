@@ -1,8 +1,15 @@
-class Animal:
-    def __init__(self, name):
-        self.name = name
+from typing import Dict
 
 
-dog = Animal("小狗")
+def foo(a: dict[str, str]):
+    print(a)
 
-print(dog.__class__.__name__)
+
+foo({"a": "123"})
+
+
+def bar(b: Dict[str, str]):
+    print(b)
+
+
+bar({"name": "abc"})
